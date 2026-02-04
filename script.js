@@ -5,17 +5,6 @@ const restartBtn = document.getElementById("restartBtn");
 const jumpSound = document.getElementById("jumpSound");
 const hitSound = document.getElementById("hitSound");
 
-// ==================
-// XBOX SUPPORT
-// ==================
-let paused = false;
-let flapPressed = false;
-let bWasPressed = false;
-
-window.addEventListener("gamepadconnected", () => {
-  console.log("Xbox Controller connected!");
-});
-
 // Resize for fullscreen/mobile
 function resizeCanvas() {
   canvas.width = Math.min(window.innerWidth, 400);
@@ -26,9 +15,10 @@ window.addEventListener("resize", resizeCanvas);
 
 // Bird image
 const birdImg = new Image();
-birdImg.src = "Bird.png";
+birdImg.src = "Bird.png"; // YOUR uploaded bird
 
 let bird, pipes, pipeSpeed, score, highScore, gameOver, frameCount;
+let paused = false;
 
 highScore = localStorage.getItem("highScore") || 0;
 
@@ -52,13 +42,11 @@ function resetGame() {
 
 resetGame();
 
-// ==================
-// CONTROLS
-// ==================
+// Controls
 document.addEventListener("keydown", e => {
   if (e.code === "Space") jump();
-  if (e.code === "Escape") paused = !paused;
 });
+
 canvas.addEventListener("mousedown", jump);
 canvas.addEventListener("touchstart", jump);
 
@@ -71,42 +59,7 @@ function jump() {
 
 restartBtn.addEventListener("click", resetGame);
 
-// ==================
-// XBOX GAMEPAD LOOP
-// ==================
-setInterval(() => {
-  const gp = navigator.getGamepads()[0];
-  if (!gp) return;
-
-  // A = Flap
-  const aPressed = gp.buttons[0]?.pressed;
-  if (aPressed && !flapPressed && !paused) {
-    jump();
-  }
-  flapPressed = aPressed;
-
-  // Left stick UP = Flap
-  if (gp.axes[1] < -0.5 && !paused) {
-    jump();
-  }
-
-  // B = Pause
-  const bPressed = gp.buttons[1]?.pressed;
-  if (bPressed && !bWasPressed) {
-    paused = !paused;
-  }
-  bWasPressed = bPressed;
-
-  // Start = Restart
-  if (gp.buttons[9]?.pressed && gameOver) {
-    resetGame();
-  }
-
-}, 100);
-
-// ==================
-// PIPES
-// ==================
+// Pipes
 function addPipe() {
   let gap = 140;
   let topHeight = Math.random() * (canvas.height - gap - 100) + 20;
@@ -132,15 +85,53 @@ function endGame() {
   }
 }
 
-// ==================
-// GAME LOOP
-// ==================
+// 🎮 GAMEPAD SUPPORT
+function handleGamepad() {
+  const gp = navigator.getGamepads()[0];
+  if (!gp) return;
+
+  // A button = Jump (button 0)
+  if (gp.buttons[0].pressed) {
+    jump();
+  }
+
+  // B button = Pause (button 1)
+  if (gp.buttons[1].pressed) {
+    paused = !paused;
+
+    // simple debounce
+    setTimeout(() => {}, 200);
+  }
+}
+
 function update() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  if (!gameOver && !paused) {
+  // 🎮 Read controller
+  handleGamepad();
+
+  // Controller Debug (BIG + BRIGHT)
+  const gp = navigator.getGamepads()[0];
+  ctx.fillStyle = "yellow";
+  ctx.font = "20px Arial";
+  ctx.fillText(
+    gp ? "Controller: ON" : "Controller: OFF",
+    10,
+    100
+  );
+
+  if (paused && !gameOver) {
+    ctx.fillStyle = "orange";
+    ctx.font = "36px Arial";
+    ctx.fillText("PAUSED", canvas.width / 2 - 70, canvas.height / 2);
+    requestAnimationFrame(update);
+    return;
+  }
+
+  if (!gameOver) {
     frameCount++;
 
+    // Harder over time 😈
     if (frameCount % 600 === 0) {
       pipeSpeed += 0.5;
     }
@@ -149,12 +140,15 @@ function update() {
     bird.velocity += bird.gravity;
     bird.y += bird.velocity;
 
+    // Draw bird
     ctx.drawImage(birdImg, bird.x, bird.y, bird.size, bird.size);
 
+    // Ground / ceiling
     if (bird.y < 0 || bird.y + bird.size > canvas.height) {
       endGame();
     }
 
+    // Pipes
     for (let p of pipes) {
       p.x -= pipeSpeed;
 
@@ -162,6 +156,7 @@ function update() {
       ctx.fillRect(p.x, 0, 50, p.top);
       ctx.fillRect(p.x, p.bottom, 50, canvas.height - p.bottom);
 
+      // Collision
       if (
         bird.x < p.x + 50 &&
         bird.x + bird.size > p.x &&
@@ -170,38 +165,25 @@ function update() {
         endGame();
       }
 
+      // Score
       if (!p.scored && p.x + 50 < bird.x) {
         p.scored = true;
         score++;
       }
     }
-  }
-
-  // PAUSED
-  if (paused && !gameOver) {
-    ctx.fillStyle = "blue";
-    ctx.font = "36px Arial";
-    ctx.fillText("PAUSED", canvas.width / 2 - 80, canvas.height / 2);
-  }
-
-  // GAME OVER
-  if (gameOver) {
+  } else {
     ctx.fillStyle = "red";
     ctx.font = "36px Arial";
     ctx.fillText("Game Over", canvas.width / 2 - 90, canvas.height / 2);
     ctx.font = "18px Arial";
-    ctx.fillText("A / Restart", canvas.width / 2 - 50, canvas.height / 2 + 30);
+    ctx.fillText("Tap Restart", canvas.width / 2 - 50, canvas.height / 2 + 30);
   }
 
-  // Score
+  // Score text
   ctx.fillStyle = "black";
   ctx.font = "18px Arial";
   ctx.fillText("Score: " + score, 10, 25);
   ctx.fillText("High: " + highScore, 10, 50);
-
-  // Controller Debug
-  const gp = navigator.getGamepads()[0];
-  ctx.fillText(gp ? "Controller: ON" : "Controller: OFF", 10, 75);
 
   requestAnimationFrame(update);
 }
